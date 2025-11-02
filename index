@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>План дня + Цели</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a"/>
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e5e7eb;--primary:#22c55e;--accent:#3b82f6;--border:#1f2937;--radius:16px}
+    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;color:var(--text);background:var(--bg)}
+    header{padding:16px 16px 8px} h1{font-size:20px;margin:0 0 8px}
+    .tabs{display:flex;gap:8px}.tab{padding:10px 12px;border-radius:12px;background:#1f2937;color:#94a3b8;font-weight:600;border:1px solid var(--border)}
+    .tab.active{background:var(--accent);color:#fff;border-color:transparent}
+    main{padding:12px;display:flex;flex-direction:column;gap:12px;max-width:760px;margin:0 auto}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+    .card h2{font-size:16px;margin:0 0 10px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    input{background:#0b1220;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px}
+    .flex{flex:1}.btn{border:0;border-radius:12px;padding:10px 14px;font-weight:700}
+    .btn.primary{background:var(--primary);color:#fff}.btn.secondary{background:var(--accent);color:#fff}
+    .list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    .item{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--border);border-radius:12px}
+    .item .title{flex:1}.pill{border-radius:999px;padding:6px 10px;background:#1f2937;color:#fff;font-weight:700;border:1px solid var(--border)}
+    .pill.ok{background:#16a34a}.pill.warn{background:#ef4444}.muted{color:var(--muted)}.mono{color:#93c5fd;font-variant-numeric:tabular-nums}
+    .bar{height:10px;border-radius:999px;background:#0b1220;border:1px solid var(--border);overflow:hidden}.bar>span{display:block;height:100%;background:var(--primary);width:0%}
+    .metrics{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap} footer{padding:20px;color:var(--muted);text-align:center}
+    .hint{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>План дня + Цели</h1>
+    <div class="tabs">
+      <button class="tab active" id="tab-today">Сегодня</button>
+      <button class="tab" id="tab-goals">Цели</button>
+      <span class="hint" style="margin-left:auto">Можно установить: Меню → «Добавить на экран»</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Сегодня -->
+    <section class="card" id="today-card">
+      <h2>Фокус-задачи</h2>
+      <div class="row">
+        <input id="task-title" class="flex" placeholder="Задача на сегодня">
+        <input id="task-est" type="number" min="0" value="25" style="width:90px" placeholder="мин">
+        <button class="btn primary" id="add-task">Добавить</button>
+      </div>
+      <div class="list" id="tasks-list"></div>
+      <div class="metrics"><span class="pill" id="done-pill">Выполнено: 0</span><span class="pill" id="est-pill">Оценка: 0м</span></div>
+    </section>
+
+    <section class="card" id="blocks-card">
+      <h2>Тайм-блок</h2>
+      <div class="row">
+        <input id="block-time" type="time" value="08:00" style="width:120px">
+        <input id="block-title" class="flex" placeholder="Дело">
+        <input id="block-min" type="number" min="0" value="60" style="width:90px" placeholder="мин">
+        <button class="btn secondary" id="add-block">OK</button>
+      </div>
+      <div class="list" id="blocks-list"></div>
+      <div class="metrics"><span class="pill" id="focus-pill">Фокус-время: 0м</span></div>
+    </section>
+
+    <!-- Цели -->
+    <section class="card" id="goals-card" style="display:none">
+      <h2>Новая цель</h2>
+      <div class="row"><input id="goal-title" class="flex" placeholder="Название цели"></div>
+      <div class="row">
+        <input id="goal-target" type="number" min="0" placeholder="Сумма цели (₽)" style="width:180px">
+        <input id="goal-monthly" type="number" min="0" placeholder="Ежемесячно (₽)" style="width:180px">
+        <button class="btn primary" id="add-goal">Сохранить</button>
+      </div>
+    </section>
+
+    <section class="card" id="goals-list-card" style="display:none">
+      <h2>Мои цели</h2>
+      <div class="list" id="goals-list"></div>
+    </section>
+  </main>
+
+  <footer>Работает офлайн · Данные хранятся на устройстве</footer>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const tasksKey="gp_tasks", blocksKey="gp_blocks", goalsKey="gp_goals";
+    const st = {
+      tasks: JSON.parse(localStorage.getItem(tasksKey)||"[]"),
+      blocks: JSON.parse(localStorage.getItem(blocksKey)||"[]"),
+      goals: JSON.parse(localStorage.getItem(goalsKey)||"[]"),
+    };
+    const save = () => { localStorage.setItem(tasksKey, JSON.stringify(st.tasks));
+                         localStorage.setItem(blocksKey, JSON.stringify(st.blocks));
+                         localStorage.setItem(goalsKey, JSON.stringify(st.goals)); };
+
+    // Tabs
+    const showTab = t => {
+      $("#tab-today").classList.toggle("active", t==="today");
+      $("#tab-goals").classList.toggle("active", t==="goals");
+      $("#today-card").style.display = t==="today" ? "" : "none";
+      $("#blocks-card").style.display = t==="today" ? "" : "none";
+      $("#goals-card").style.display = t==="goals" ? "" : "none";
+      $("#goals-list-card").style.display = t==="goals" ? "" : "none";
+    };
+    $("#tab-today").onclick=()=>showTab("today");
+    $("#tab-goals").onclick=()=>showTab("goals");
+
+    // Tasks
+    const renderTasks = () => {
+      const list=$("#tasks-list"); list.innerHTML="";
+      st.tasks.forEach(item=>{
+        const row=document.createElement("div"); row.className="item";
+        const pill=document.createElement("button"); pill.className="pill "+(item.done?"ok":""); pill.textContent=item.done?"Готово":"В работе";
+        pill.onclick=()=>{item.done=!item.done; save(); renderTasks();};
+        const title=document.createElement("div"); title.className="title"; title.textContent=item.title;
+        if(item.done){ title.style.opacity=.6; title.style.textDecoration="line-through"; }
+        const est=document.createElement("div"); est.className="mono"; est.textContent=(item.est||0)+"м";
+        const del=document.createElement("button"); del.className="pill warn"; del.textContent="Удалить";
+        del.onclick=()=>{st.tasks=st.tasks.filter(t=>t.id!==item.id); save(); renderTasks();};
+        row.append(pill,title,est,del); list.appendChild(row);
+      });
+      $("#done-pill").textContent="Выполнено: "+st.tasks.filter(t=>t.done).length;
+      $("#est-pill").textContent="Оценка: "+st.tasks.reduce((a,b)=>a+(b.est||0),0)+"м";
+    };
+    $("#add-task").onclick=()=>{
+      const title=$("#task-title").value.trim(); const est=parseInt($("#task-est").value||"0",10);
+      if(!title) return; st.tasks=[{id:Date.now()+"",title,est,done:false},...st.tasks];
+      save(); $("#task-title").value=""; $("#task-est").value="25"; renderTasks();
+    };
+
+    // Blocks
+    const renderBlocks = () => {
+      const list=$("#blocks-list"); list.innerHTML="";
+      st.blocks.forEach(b=>{
+        const row=document.createElement("div"); row.className="item";
+        row.innerHTML=`<div class="mono">${b.time}</div><div class="title">${b.title}</div><div class="mono">${b.minutes||0}м</div>`;
+        const del=document.createElement("button"); del.className="pill warn"; del.textContent="Удалить";
+        del.onclick=()=>{st.blocks=st.blocks.filter(x=>x.id!==b.id); save(); renderBlocks();};
+        row.appendChild(del); list.appendChild(row);
+      });
+      $("#focus-pill").textContent="Фокус-время: "+st.blocks.reduce((a,b)=>a+(b.minutes||0),0)+"м";
+    };
+    $("#add-block").onclick=()=>{
+      const time=$("#block-time").value||"08:00"; const title=$("#block-title").value.trim(); const minutes=parseInt($("#block-min").value||"0",10);
+      if(!title) return; st.blocks=[...st.blocks,{id:Date.now()+"",time,title,minutes}];
+      save(); $("#block-title").value=""; $("#block-min").value="60"; renderBlocks();
+    };
+
+    // Goals
+    const fmt = n => (n||0).toLocaleString("ru-RU");
+    const renderGoals = () => {
+      const list=$("#goals-list"); list.innerHTML="";
+      st.goals.forEach(g=>{
+        const left=Math.max(g.target-(g.saved||0),0);
+        const months=g.monthly>0?Math.ceil(left/g.monthly):null;
+        const reach=months?new Date(new Date(g.startIso).setMonth(new Date(g.startIso).getMonth()+months)).toISOString().slice(0,10):"-";
+        const pct=g.target>0?Math.min((g.saved||0)/g.target,1):0;
+
+        const row=document.createElement("div"); row.className="item"; row.style.flexDirection="column"; row.style.alignItems="stretch";
+        const title=document.createElement("div"); title.className="title"; title.style.fontWeight="700"; title.textContent=g.title;
+        const bar=document.createElement("div"); bar.className="bar"; const fill=document.createElement("span"); fill.style.width=(pct*100).toFixed(0)+"%"; bar.appendChild(fill);
+        const meta=document.createElement("div"); meta.className="muted"; meta.textContent=`Осталось: ${fmt(left)} ₽ · Мес: ${months??"-"} · Дата: ${reach}`;
+        const controls=document.createElement("div"); controls.className="row";
+        const plus=document.createElement("button"); plus.className="btn secondary"; plus.textContent="+ Взнос";
+        plus.onclick=()=>{const v=parseInt(prompt("Сколько добавить (₽)?","1000")||"0",10); if(!isNaN(v)){g.saved=(g.saved||0)+v; save(); renderGoals();}};
+        const del=document.createElement("button"); del.className="btn"; del.style.background="#1f2937"; del.style.color="#fff"; del.textContent="Удалить";
+        del.onclick=()=>{st.goals=st.goals.filter(x=>x.id!==g.id); save(); renderGoals();};
+        controls.append(plus,del); row.append(title,bar,meta,controls); list.appendChild(row);
+      });
+    };
+    $("#add-goal").onclick=()=>{
+      const title=$("#goal-title").value.trim(); const target=parseInt($("#goal-target").value||"0",10); const monthly=parseInt($("#goal-monthly").value||"0",10);
+      if(!title) return; st.goals=[{id:Date.now()+"",title,target,saved:0,monthly,startIso:new Date().toISOString().slice(0,10)},...st.goals];
+      save(); $("#goal-title").value=""; $("#goal-target").value=""; $("#goal-monthly").value=""; renderGoals();
+    };
+
+    // Init + PWA
+    renderTasks(); renderBlocks(); renderGoals(); showTab("today");
+    if("serviceWorker" in navigator){ window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js")); }
+  </script>
+</body>
+</html>
